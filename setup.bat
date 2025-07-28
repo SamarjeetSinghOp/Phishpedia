@@ -9,16 +9,20 @@ echo [%DATE% %TIME%] Starting setup...
 :: ------------------------------------------------------------------------------
 :: Tool Checks
 :: ------------------------------------------------------------------------------
+
+
 where pixi >nul 2>nul || (
     echo [ERROR] pixi not found. Please install Pixi.
     exit /b 1
 )
-where gdown >nul 2>nul || (
-    echo [ERROR] gdown not found. Please install gdown (via pixi).
+
+where python >nul 2>nul || (
+    echo [ERROR] Python not found. Please install Python.
     exit /b 1
 )
-where unzip >nul 2>nul || (
-    echo [ERROR] unzip not found. Please install unzip utility.
+
+where tar >nul 2>nul || (
+    echo [ERROR] tar not found. Please install tar.
     exit /b 1
 )
 
@@ -27,6 +31,8 @@ where unzip >nul 2>nul || (
 :: ------------------------------------------------------------------------------
 set "FILEDIR=%cd%"
 set "MODELS_DIR=%FILEDIR%\models"
+echo [%DATE% %TIME%] Using models directory: %MODELS_DIR%
+
 if not exist "%MODELS_DIR%" mkdir "%MODELS_DIR%"
 cd /d "%MODELS_DIR%"
 
@@ -42,6 +48,8 @@ pixi run pip install --no-build-isolation git+https://github.com/facebookresearc
 :: ------------------------------------------------------------------------------
 :: File Metadata
 :: ------------------------------------------------------------------------------
+
+echo [%DATE% %TIME%] Preparing to download model files...
 set RETRY_COUNT=3
 
 :: Model files and Google Drive IDs
@@ -63,35 +71,28 @@ set id5=1qSdkSSoCYUkZMKs44Rup_1DPBxHnEKl1
 :: ------------------------------------------------------------------------------
 :: Download Loop
 :: ------------------------------------------------------------------------------
+echo [%DATE% %TIME%] Starting download of model files...
 for /L %%i in (1,1,5) do (
-    call set "FILENAME=%%file%%i%%"
-    call set "FILEID=%%id%%i%%"
+    echo [%DATE% %TIME%] Processing file %%i.
+
+    call set "FILENAME=!file%%i!"
+    call set "FILEID=!id%%i!"
+
+    echo [%DATE% %TIME%] Processing !FILENAME! with ID !FILEID!
 
     if exist "!FILENAME!" (
         echo [INFO] !FILENAME! already exists. Skipping.
     ) else (
-        set /A count=1
-        :retry_%%i
-        echo [%DATE% %TIME%] Downloading !FILENAME! (Attempt !count!/%RETRY_COUNT%)...
-        pixi run gdown --id !FILEID! -O "!FILENAME!" && goto downloaded_%%i
-
-        set /A count+=1
-        if !count! LEQ %RETRY_COUNT% (
-            timeout /t 2 >nul
-            goto retry_%%i
-        ) else (
-            echo [ERROR] Failed to download !FILENAME! after %RETRY_COUNT% attempts.
-            exit /b 1
-        )
-        :downloaded_%%i
-    )
+        echo [%DATE% %TIME%] Downloading !FILENAME!
+        pixi run gdown --id !FILEID! -O "!FILENAME!"
+    )  
 )
 
 :: ------------------------------------------------------------------------------
 :: Extraction
 :: ------------------------------------------------------------------------------
 echo [%DATE% %TIME%] Extracting expand_targetlist.zip...
-unzip -o expand_targetlist.zip -d expand_targetlist || (
+tar -xf expand_targetlist.zip || (
     echo [ERROR] Failed to unzip file.
     exit /b 1
 )

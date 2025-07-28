@@ -1,3 +1,15 @@
+import sys
+import os
+
+# Get the directory of the current script
+current_dir = os.path.dirname(os.path.abspath(__file__))
+
+# Get the parent directory
+parent_dir = os.path.dirname(current_dir)
+
+# Add the parent directory to sys.path
+sys.path.append(parent_dir)
+
 import os
 import shutil
 from flask import request, Flask, jsonify, render_template, send_from_directory
@@ -37,7 +49,7 @@ def upload_file():
         filename = file.filename
         if filename.count('.') > 1:
             return jsonify({'error': 'Invalid file name'}), 400
-        elif any(sep in filename for sep in (os.sep, os.altsep)):
+        elif any(sep in filename for sep in (os.sep, os.altsep) if sep is not None):
             return jsonify({'error': 'Invalid file name'}), 400
         elif '..' in filename:
             return jsonify({'error': 'Invalid file name'}), 400

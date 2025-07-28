@@ -3,3 +3,8 @@
 *.pth*
 venv/
 __pycache__/
+models/
+phishpedia_env/
+*_results.txt
+*.lock
+LOGO_*.npy
