@@ -8,3 +8,4 @@ phishpedia_env/
 *_results.txt
 *.lock
 LOGO_*.npy
+static/uploads/

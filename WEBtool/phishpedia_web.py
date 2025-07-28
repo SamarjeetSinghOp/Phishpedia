@@ -24,9 +24,9 @@ phishpedia_cls = None
 app = Flask(__name__)
 cors = CORS(app, supports_credentials=True)
 app.config['CORS_HEADERS'] = 'Content-Type'
-app.config['UPLOAD_FOLDER'] = 'static/uploads'
-app.config['FILE_TREE_ROOT'] = '../models/expand_targetlist'  # 主目录路径
-app.config['DOMAIN_MAP_PATH'] = '../models/domain_map.pkl'
+app.config['UPLOAD_FOLDER'] = 'static/uploads'.replace('/', os.path.sep)  # 上传文件的存储路径
+app.config['FILE_TREE_ROOT'] = '../models/expand_targetlist'.replace('/', os.path.sep)  # 主目录路径
+app.config['DOMAIN_MAP_PATH'] = '../models/domain_map.pkl'.replace('/', os.path.sep)
 
 
 @app.route('/')
