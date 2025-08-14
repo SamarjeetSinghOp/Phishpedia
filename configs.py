@@ -2,6 +2,7 @@
 import yaml
 from logo_matching import cache_reference_list, load_model_weights
 from logo_recog import config_rcnn
+from detector_adapter import config_rfdetr
 import os
 import numpy as np
 
@@ -11,7 +12,7 @@ def get_absolute_path(relative_path):
     return os.path.abspath(os.path.join(base_path, relative_path))
 
 
-def load_config(reload_targetlist=False):
+def load_config(reload_targetlist: bool = False, detector_override: str | None = None):
     with open(os.path.join(os.path.dirname(__file__), 'configs.yaml')) as file:
         configs = yaml.load(file, Loader=yaml.FullLoader)
 
@@ -22,12 +23,19 @@ def load_config(reload_targetlist=False):
                 absolute_path = get_absolute_path(value)
                 configs[section][key] = absolute_path
 
-    ELE_CFG_PATH = configs['ELE_MODEL']['CFG_PATH']
-    ELE_WEIGHTS_PATH = configs['ELE_MODEL']['WEIGHTS_PATH']
-    ELE_CONFIG_THRE = configs['ELE_MODEL']['DETECT_THRE']
-    ELE_MODEL = config_rcnn(ELE_CFG_PATH,
-                            ELE_WEIGHTS_PATH,
-                            conf_threshold=ELE_CONFIG_THRE)
+    det_type = (detector_override or configs['ELE_MODEL'].get('DETECTOR_TYPE', 'rcnn')).lower()
+    if det_type == 'rfdetr':
+        RFD_WEIGHTS = configs['ELE_MODEL']['RFD_WEIGHTS_PATH']
+        RFD_THRESHOLD = configs['ELE_MODEL'].get('RFD_THRESHOLD', 0.5)
+        RFD_RESOLUTION = configs['ELE_MODEL'].get('RFD_RESOLUTION', None)
+        ELE_MODEL = config_rfdetr(RFD_WEIGHTS, threshold=RFD_THRESHOLD, resolution=RFD_RESOLUTION)
+    else:
+        ELE_CFG_PATH = configs['ELE_MODEL']['CFG_PATH']
+        ELE_WEIGHTS_PATH = configs['ELE_MODEL']['WEIGHTS_PATH']
+        ELE_CONFIG_THRE = configs['ELE_MODEL']['DETECT_THRE']
+        ELE_MODEL = config_rcnn(ELE_CFG_PATH,
+                                ELE_WEIGHTS_PATH,
+                                conf_threshold=ELE_CONFIG_THRE)
 
     # siamese model
     SIAMESE_THRE = configs['SIAMESE_MODEL']['MATCH_THRE']

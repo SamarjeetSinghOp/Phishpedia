@@ -278,7 +278,10 @@ def check_domain_brand_inconsistency(logo_boxes,
                                      model, logo_feat_list,
                                      file_name_list, shot_path: str,
                                      url: str, similarity_threshold: float,
-                                     topk: float = 3):
+                                     topk: float = 3,
+                                     grayscale: bool = False,
+                                     do_resolution_alignment: bool = False,
+                                     do_aspect_ratio_check: bool = False):
     # targetlist domain list
     with open(domain_map_path, 'rb') as handle:
         domain_map = pickle.load(handle)
@@ -298,13 +301,14 @@ def check_domain_brand_inconsistency(logo_boxes,
 
             min_x, min_y, max_x, max_y = coord
             bbox = [float(min_x), float(min_y), float(max_x), float(max_y)]
-            matched_target, matched_domain, this_conf = pred_brand(model, domain_map,
-                                                                   logo_feat_list, file_name_list,
-                                                                   shot_path, bbox,
-                                                                   similarity_threshold=similarity_threshold,
-                                                                   grayscale=False,
-                                                                   do_aspect_ratio_check=False,
-                                                                   do_resolution_alignment=False)
+            matched_target, matched_domain, this_conf = pred_brand(
+                model, domain_map,
+                logo_feat_list, file_name_list,
+                shot_path, bbox,
+                similarity_threshold=similarity_threshold,
+                grayscale=grayscale,
+                do_aspect_ratio_check=do_aspect_ratio_check,
+                do_resolution_alignment=do_resolution_alignment)
 
             # print(target_this, domain_this, this_conf)
             # domain matcher to avoid FP
@@ -482,51 +486,84 @@ def pred_brand(model, domain_map, logo_feat_list, file_name_list, shot_path: str
 
     assert len(sim_list) == len(pred_brand_list)
 
-    # get top 3 brands
-    idx = np.argsort(sim_list)[::-1][:3]
-    pred_brand_list = np.array(pred_brand_list)[idx]
-    sim_list = np.array(sim_list)[idx]
+    # get top results sorted by similarity
+    idx = np.argsort(sim_list)[::-1]
+    sorted_brands = np.array(pred_brand_list)[idx]
+    sorted_sims = np.array(sim_list)[idx]
 
-    # top1,2,3 candidate logos
-    top3_brandlist = [brand_converter(os.path.basename(os.path.dirname(x))) for x in pred_brand_list]
+    # Get unique brands with their best similarities (deduplicate)
+    unique_brands = []
+    unique_sims = []
+    unique_paths = []
+    seen_brands = set()
+    
+    for i in range(len(sorted_brands)):
+        brand_name = brand_converter(os.path.basename(os.path.dirname(sorted_brands[i])))
+        if brand_name not in seen_brands:
+            unique_brands.append(brand_name)
+            unique_sims.append(sorted_sims[i])
+            unique_paths.append(sorted_brands[i])
+            seen_brands.add(brand_name)
+            if len(unique_brands) >= 3:  # Only need top 3 unique brands
+                break
+
+    # top1,2,3 candidate logos (now unique brands)
+    top3_brandlist = unique_brands[:3]
     top3_domainlist = [domain_map[x] for x in top3_brandlist]
-    top3_simlist = sim_list
+    top3_simlist = unique_sims[:3]
+    pred_brand_list = unique_paths[:3]
 
-    for j in range(3):
+    # DEBUG: Print matching details
+    print(f"🔍 Siamese matching debug:")
+    print(f"   Threshold: {similarity_threshold}")
+    print(f"   Top 3 similarities: {top3_simlist}")
+    print(f"   Top 3 brands: {top3_brandlist}")
+    print(f"   Max similarity: {np.max(top3_simlist)} ({'PASS' if np.max(top3_simlist) >= similarity_threshold else 'FAIL'})")
+
+    for j in range(len(top3_brandlist)):
         predicted_brand, predicted_domain = None, None
 
-        # If we are trying those lower rank logo, the predicted brand of them should be the same as top1 logo, otherwise might be false positive
-        if top3_brandlist[j] != top3_brandlist[0]:
-            continue
+        # Since we now have unique brands, each iteration is a different brand
+        current_brand = top3_brandlist[j]
+        current_sim = top3_simlist[j]
+        current_path = pred_brand_list[j]
 
-        # If the largest similarity exceeds threshold
-        if top3_simlist[j] >= similarity_threshold:
-            predicted_brand = top3_brandlist[j]
+        # If the similarity exceeds threshold
+        if current_sim >= similarity_threshold:
+            predicted_brand = current_brand
             predicted_domain = top3_domainlist[j]
-            final_sim = top3_simlist[j]
+            final_sim = current_sim
+            print(f"   ✅ Direct match: {predicted_brand} (similarity: {final_sim})")
 
         # Else if not exceed, try resolution alignment, see if can improve
         elif do_resolution_alignment:
-            orig_candidate_logo = Image.open(pred_brand_list[j])
-            cropped, candidate_logo = resolution_alignment(cropped, orig_candidate_logo)
-            img_feat = get_embedding(cropped, model, grayscale=grayscale)
+            print(f"   🔄 Trying resolution alignment for {current_brand} (current sim: {current_sim})")
+            orig_candidate_logo = Image.open(current_path)
+            cropped_aligned, candidate_logo = resolution_alignment(cropped, orig_candidate_logo)
+            img_feat_aligned = get_embedding(cropped_aligned, model, grayscale=grayscale)
             logo_feat = get_embedding(candidate_logo, model, grayscale=grayscale)
-            final_sim = logo_feat.dot(img_feat)
+            final_sim = logo_feat.dot(img_feat_aligned)
+            print(f"   After alignment: {final_sim} ({'PASS' if final_sim >= similarity_threshold else 'FAIL'})")
             if final_sim >= similarity_threshold:
-                predicted_brand = top3_brandlist[j]
+                predicted_brand = current_brand
                 predicted_domain = top3_domainlist[j]
             else:
-                break  # no hope, do not try other lower rank logos
+                continue  # try next brand
 
         ## If there is a prediction, do aspect ratio check
         if predicted_brand is not None:
             if do_aspect_ratio_check:
-                orig_candidate_logo = Image.open(pred_brand_list[j])
+                orig_candidate_logo = Image.open(current_path)
                 ratio_crop = cropped.size[0] / cropped.size[1]
                 ratio_logo = orig_candidate_logo.size[0] / orig_candidate_logo.size[1]
+                ratio_diff = max(ratio_crop, ratio_logo) / min(ratio_crop, ratio_logo)
+                print(f"   📐 Aspect ratio check: crop={ratio_crop:.2f}, logo={ratio_logo:.2f}, diff={ratio_diff:.2f} ({'PASS' if ratio_diff <= 2.5 else 'FAIL'})")
                 # aspect ratios of matched pair must not deviate by more than factor of 2.5
-                if max(ratio_crop, ratio_logo) / min(ratio_crop, ratio_logo) > 2.5:
-                    continue  # did not pass aspect ratio check, try other
+                if ratio_diff > 2.5:
+                    print(f"   ❌ Failed aspect ratio check for {predicted_brand}")
+                    continue  # did not pass aspect ratio check, try next brand
+            print(f"   🎯 Final match: {predicted_brand} (confidence: {final_sim})")
             return predicted_brand, predicted_domain, final_sim
 
+    print(f"   ❌ No matches found above threshold {similarity_threshold}")
     return None, None, top3_simlist[0]

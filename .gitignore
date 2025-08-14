@@ -1,11 +1,40 @@
+# File types
 *.zip
 *.pkl
 *.pth*
-venv/
-__pycache__/
-models/
-phishpedia_env/
-*_results.txt
 *.lock
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Environment and dependencies
+venv/
+phishpedia_env/
+
+# Model files
+models/
 LOGO_*.npy
+
+# Uploads
 static/uploads/
+
+# Result files
+*_results.txt
+
+# Test weights
+test_weights.pt
+
+# Large datasets - ignore all but keep one sample folder
+datasets/*
+!datasets/test_sites/
+datasets/test_sites/*
+!datasets/test_sites/1&1*
+
+# Analysis and result directories
+rcnn_coco_results/
+ignorehelp/
+analysis_20250811/
+
+# Other directories to ignore
+ignore/
